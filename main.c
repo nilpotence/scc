@@ -3,91 +3,303 @@
 #include <string.h>
 
 #define WORD_MAX_LENGTH 255
-
-
-typedef enum {
-	EMPTY = 0,
-	INTERNAL,
-	K_INT,
-	K_FLOAT,
-	K_IF,
-	K_EQ,
-	K_ADD,
-	K_SUB,
-	K_SEMICOLON,
-	K_DOT,
-	K_OPEN_PAR,
-	K_CLOSE_PAR,
-	K_SPACE,
-	K_LINE_RETURN,
-	INTEGER,
-	FLOAT,
-	IDENTIFIER
-} TokenType;
-
+#define TRUE 1
+#define FALSE 0
 
 struct _State;
 
 typedef struct _StateTransition {
-	char event;
-	struct _State * newState;
+	char event[WORD_MAX_LENGTH];
+	struct _State * state;
 	struct _StateTransition * next;
 } StateTransition;
 
 typedef struct _State {
-	TokenType type;
+	char stateName[WORD_MAX_LENGTH];
+	int isFinal;
 	StateTransition *transitions;
 } State;
 
 
-typedef struct _Tokenizer {
+typedef struct _Automata {
 	State * startState;
 	State * currentState;
 	char currentWord[WORD_MAX_LENGTH];
+	int currentWordLen;
+} Automata;
+
+
+typedef struct _Tokenizer {
+	Automata *automata;
+	struct _Tokenizer *next;
 } Tokenizer;
 
+Tokenizer * tokenizer_new () {
+	Tokenizer * t = (Tokenizer*) malloc (sizeof (Tokenizer));
+	t->automata = NULL;
+	t->next = NULL;	
+}
 
-State * state_new (TokenType type) {
+void tokenizer_add (Tokenizer *t, Automata * automata) {
+	if (t->automata == NULL) {
+		t->automata = automata;
+		return ;
+	}
+
+	Tokenizer *n = t;
+	while (n->next != NULL) n = n->next;
+	n->next = tokenizer_new (automata);
+}
+
+Tokenizer * tokenizer_remove (Tokenizer *t, Automata * automata) {
+	if (t->automata == automata) {
+		Tokenizer *ret = t->next;
+		free (t);
+		return ret;
+	}
+
+	return t;	
+}
+
+
+
+State * state_new (const char * stateName, int stateNameLen, int isFinal) {
 	State * state = (State*) malloc (sizeof (State));
-	state->type = type;
+	strncpy (state->stateName, stateName, stateNameLen);
+	state->isFinal = isFinal;
 	state->transitions = NULL;
 	return state;
 }
 
+void state_transition_add (State * state, StateTransition *transition) {
+	if (state->transitions == NULL) {
+		state->transitions = transition;
+		return ;
+	}
 
-Tokenizer * tokenizer_new () {
-	Tokenizer *t = (Tokenizer*) malloc (sizeof (Tokenizer));
-	t->startState = state_new (EMPTY);
+	StateTransition *trans = state->transitions;
+	while (trans->next != NULL) trans = trans->next;
+
+	trans->next = transition;
+}
+
+StateTransition * state_transition_new (const char event[], State * newState) {
+	StateTransition * transition = (StateTransition *) malloc (sizeof (StateTransition));
+	strcpy(transition->event, event);
+	transition->state = newState;
+	transition->next = NULL;
+	return transition;
+}
+
+int state_transition_is_applicable (StateTransition * transition, const char event) {
+	int eventLen = strlen (transition->event);
+	for (int i = 0; i < eventLen; i++) {
+		if (transition->event[i] == event) {
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+
+Automata * automata_new () {
+	Automata *t = (Automata*) malloc (sizeof (Automata));
+	t->startState = state_new ("", 0, FALSE);
 	t->currentState = t->startState;
 	strncpy (t->currentWord, "", WORD_MAX_LENGTH);
+	t->currentWordLen = 0;
 	return t;
 }
 
-void tokenizer_reset (Tokenizer * t) {
+void automata_reset (Automata * t) {
 	t->currentState = t->startState;
+	t->currentWordLen = 0;
 }
 
-void tokenizer_add_keyword (Tokenizer *t, TokenType type, const char keyword[]) {
+
+int automata_feed_char (Automata * t, char c) {
+	if (t->currentState->transitions == NULL) {
+		return FALSE;
+	}
+
+	StateTransition * trans = t->currentState->transitions;
+	while (trans != NULL && !state_transition_is_applicable (trans, c)) {
+		trans = trans->next;
+	}
+
+	if (trans == NULL) {
+		return FALSE;
+	}
+
+	t->currentState = trans->state;
+	t->currentWord[t->currentWordLen] = c;
+	t->currentWordLen ++;
+	
+	return TRUE;
+}
+
+int automata_is_valid (Automata *t, const char word[]) {
+	int len = strlen (word);
+	for (int i = 0; i < len; i++) {
+		if (!automata_feed_char (t, word[i])) {
+			automata_reset (t);
+			return FALSE;
+		}
+	}
+
+	int isValid = t->currentState->isFinal;
+	automata_reset (t);
+	return isValid;
+}
+
+void automata_add_keyword (Automata *t, const char keyword[]) {
 	int keywordLength = strlen (keyword);
+	char event[WORD_MAX_LENGTH];
 
 	for (int i = 0; i < keywordLength; i++) {
+		State *newState = NULL;
 		StateTransition *trans = t->currentState->transitions;
 		StateTransition *prevTrans = NULL;
 
-		while (trans != NULL && trans->event != keyword[i]) {
-			trans = trans->next;
-		}
+		if (trans == NULL) {
+			newState = state_new (keyword, i + 1, FALSE);
+			strncpy (event, &keyword[i], 1);
+			trans = state_transition_new (event, newState);	
+			t->currentState->transitions = trans;
+		} else {
+			while (trans != NULL && ! state_transition_is_applicable (trans, keyword[i])) {
+				prevTrans = trans;
+				trans = trans->next;
+			}
 
-		
+			if (trans == NULL) {
+				newState = state_new (keyword, i + 1, FALSE);
+				strncpy (event, &keyword[i], 1);
+				trans = state_transition_new (event, newState);
+				prevTrans->next = trans;
+			} 
+		}
+		t->currentState = trans->state;
+	}
+	
+	t->currentState->isFinal = TRUE;
+	automata_reset (t);
+}
+
+void automata_state_show (State *s, int depth) {
+	if (s->isFinal) {
+		printf ("[[%s]]\n", s->stateName);
+	} else {
+		printf ("[%s]\n", s->stateName);
+	}
+	
+	StateTransition *trans = s->transitions;
+	while (trans != NULL) {
+		for (int i = 0; i < depth; i++) putchar ('\t');
+		printf ("|---> ");
+		automata_state_show (trans->state, depth + 1);
+		trans = trans->next;
 	}
 }
 
+void automata_show (Automata *t) {
+	automata_state_show (t->startState, 0);
+}
+
+Automata * number_automata_new () {
+
+	State *initState = state_new ("", 0, FALSE);
+	State *integerState = state_new ("INTEGER", 7, TRUE);
+	State *floatState = state_new ("FLOAT", 5, TRUE);
+
+	StateTransition *integerTransition = state_transition_new ("0123456789", integerState);
+	state_transition_add (initState, integerTransition);
+	state_transition_add (integerState, integerTransition);
+
+	StateTransition *toFloatTransition = state_transition_new (".", floatState);
+	state_transition_add (integerState, toFloatTransition);
+	StateTransition *floatTransition = state_transition_new ("0123456789", floatState);
+	state_transition_add (floatState, floatTransition);
+
+	Automata *automata = automata_new ();
+	automata->startState = initState;
+	automata->currentState = initState;
+
+	return automata;
+}
+
+Automata * identifier_automata_new () {
+	State *initState = state_new ("", 0, FALSE);
+	State *idState = state_new ("IDENTIFIER", 10, TRUE);
+	StateTransition * idTransition = state_transition_new ("abcdefghijklmnopkrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_", idState);
+	state_transition_add (initState, idTransition);
+	state_transition_add (idState, idTransition);
+
+	Automata *automata = automata_new ();
+	automata->startState = initState;
+	automata->currentState = initState;
+
+	return automata;
+}
+
+
+Automata * space_automata_new () {
+	State *initState = state_new ("", 0, FALSE);
+	State *spaceState = state_new ("IDENTIFIER", 10, TRUE);
+	StateTransition * spaceTransition = state_transition_new (" \t\n", spaceState);
+	state_transition_add (initState, spaceTransition);
+	state_transition_add (spaceState, spaceTransition);
+
+	Automata *automata = automata_new ();
+	automata->startState = initState;
+	automata->currentState = initState;
+
+	return automata;
+}
 
 int main (int argc, char * argv[]) {
 
-	Tokenizer * t = tokenizer_new ();
+	Automata * keywordAutomata = automata_new ();
 
-	tokenizer_add_keyword (K_INT, "int");
+	automata_add_keyword (keywordAutomata, "int");
+	automata_add_keyword (keywordAutomata, "if");
+	automata_add_keyword (keywordAutomata, "float");
+	automata_add_keyword (keywordAutomata, "+");
+	automata_add_keyword (keywordAutomata, "-");
+	automata_add_keyword (keywordAutomata, ";");
+	automata_add_keyword (keywordAutomata, "->");
+	automata_add_keyword (keywordAutomata, "(");
+	automata_add_keyword (keywordAutomata, ")");
+	automata_add_keyword (keywordAutomata, "!=");
+	automata_add_keyword (keywordAutomata, "==");
+	automata_add_keyword (keywordAutomata, "<");
+	automata_add_keyword (keywordAutomata, ">");
+	automata_add_keyword (keywordAutomata, "=>");
+	automata_add_keyword (keywordAutomata, ">=");
+	automata_add_keyword (keywordAutomata, "=<");
+	automata_add_keyword (keywordAutomata, "<=");
+
+	automata_show (keywordAutomata);
+
+	Automata * numberAutomata = number_automata_new ();
+
+	Automata *identifierAutomata = identifier_automata_new ();
+
+	Automata *spaceAutomata = space_automata_new ();
+
+	Tokenizer *t = tokenizer_new ();
+	tokenizer_add (t, keywordAutomata);
+	tokenizer_add (t, numberAutomata);
+	tokenizer_add (t, identifierAutomata);
+	tokenizer_add (t, spaceAutomata);
+
+	const char program[] = "int a = 1;\n int b = 2;  int c = a + b;";
+	int programLen = strlen (program);
+
+	for (int i = 0; i < programLen; i++) {
+
+	}
+	
+
 
 	return 0;
 }
