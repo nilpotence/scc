@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 #define WORD_MAX_LENGTH 255
 #define TRUE 1
@@ -28,40 +29,13 @@ typedef struct _Automata {
 	int currentWordLen;
 } Automata;
 
-
-typedef struct _Tokenizer {
-	Automata *automata;
-	struct _Tokenizer *next;
-} Tokenizer;
-
-Tokenizer * tokenizer_new () {
-	Tokenizer * t = (Tokenizer*) malloc (sizeof (Tokenizer));
-	t->automata = NULL;
-	t->next = NULL;	
+int min (int a, int b) {
+	return a < b ? a : b;
 }
 
-void tokenizer_add (Tokenizer *t, Automata * automata) {
-	if (t->automata == NULL) {
-		t->automata = automata;
-		return ;
-	}
-
-	Tokenizer *n = t;
-	while (n->next != NULL) n = n->next;
-	n->next = tokenizer_new (automata);
+int max (int a, int b) {
+	return a > b ? a : b;
 }
-
-Tokenizer * tokenizer_remove (Tokenizer *t, Automata * automata) {
-	if (t->automata == automata) {
-		Tokenizer *ret = t->next;
-		free (t);
-		return ret;
-	}
-
-	return t;	
-}
-
-
 
 State * state_new (const char * stateName, int stateNameLen, int isFinal) {
 	State * state = (State*) malloc (sizeof (State));
@@ -277,26 +251,67 @@ int main (int argc, char * argv[]) {
 	automata_add_keyword (keywordAutomata, ">=");
 	automata_add_keyword (keywordAutomata, "=<");
 	automata_add_keyword (keywordAutomata, "<=");
-
-	automata_show (keywordAutomata);
+	automata_add_keyword (keywordAutomata, "=");
 
 	Automata * numberAutomata = number_automata_new ();
-
 	Automata *identifierAutomata = identifier_automata_new ();
-
 	Automata *spaceAutomata = space_automata_new ();
 
-	Tokenizer *t = tokenizer_new ();
-	tokenizer_add (t, keywordAutomata);
-	tokenizer_add (t, numberAutomata);
-	tokenizer_add (t, identifierAutomata);
-	tokenizer_add (t, spaceAutomata);
+	Automata * automatas[4] = { keywordAutomata, numberAutomata, identifierAutomata, spaceAutomata };
+	Automata * valids[4] = { keywordAutomata, numberAutomata, identifierAutomata, spaceAutomata };
+	Automata * invalids[4] = { NULL, NULL, NULL, NULL };
 
-	const char program[] = "int a = 1;\n int b = 2;  int c = a + b;";
+	const char program[] = "int a = 1;\n int b = 4;  int c = a + b; ";
 	int programLen = strlen (program);
 
 	for (int i = 0; i < programLen; i++) {
+		int hasValids = FALSE;	
+		for (int j = 0; j < 4; j++) {
+			if (valids[j] == NULL) continue ;
+			if (!automata_feed_char(valids[j], program[i])) {
+				invalids[j] = valids[j];
+				valids[j] = NULL;
+			} else {
+				hasValids = TRUE;
+			}
+		}
 
+		if (hasValids) {
+			for (int j = 0; j < 4; j++) invalids[j] = NULL;
+			continue ;
+		}
+
+		int selectedAutomata = -1;
+		for (int j = 0; j < 4; j++) {
+			if (invalids[j] == NULL) continue ;
+			if (invalids[j]->currentState->isFinal) {
+				selectedAutomata = j;
+				break ;
+			}
+		}
+
+		char word[WORD_MAX_LENGTH] = "";
+
+		int m = max (0, i - 10);
+		int M = min (programLen, i + 10);		
+		strncpy (word, &program[m], M - m);
+		word[M] = 0;
+		if (selectedAutomata == -1) {
+			printf ("Syntax error :\n");
+			printf ("%s\n\n", word);
+			break ;
+		}
+
+		strncpy (word, invalids[selectedAutomata]->currentWord, invalids[selectedAutomata]->currentWordLen);
+		word[invalids[selectedAutomata]->currentWordLen] = 0;
+		printf ("TOKEN : %s\n", word);
+
+		for (int j = 0; j < 4; j++) {
+			invalids[j] = NULL;
+			valids[j] = automatas[j];
+			automata_reset (automatas[j]);
+		}
+		i = i - 1;
 	}
 	
 
