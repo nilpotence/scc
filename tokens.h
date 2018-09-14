@@ -13,24 +13,22 @@ typedef enum {
 	SEPARATOR,
 	OPEN_PAR,
 	CLOSE_PAR,
-	EQ,
-	NEQ,
-	GT,
-	GTE,
-	LT,
-	LTE,
 	ASSIGN,
 	NUMBER,
+	STRING,
+	COMMENT,
 	BOOLEAN,
 	IDENTIFIER
 } TokenType;
 
-typedef struct {
+typedef struct _Automata {
 	TokenType type;
+	int (*feedFunc)(struct _Automata *, char);
 	int state;
 	int isFinal;
 	char word[WORD_MAX_LENGTH];
 	char wordLength;
 } Automata;
+
 
 #endif
