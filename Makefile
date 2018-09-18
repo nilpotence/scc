@@ -1,7 +1,15 @@
+CC=gcc
+CFLAGS=-g
 
+all: bin bin/scc
 
-all: main.c
-	gcc -g -o scc main.c
+bin/scc: bin/main.o bin/tokens.o
+	$(CC) -o $@ $^
+
+bin/%.o: src/%.c src/%.h
+	$(CC) -c -o $@ $< $(CFLAGS) 
+bin:
+	mkdir -p $@ 
 
 clean:
-	rm scc
+	rm -rf bin

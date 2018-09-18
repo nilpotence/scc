@@ -440,17 +440,3 @@ void tokenizer_feed (Tokenizer *t, char programChunk[], int chunkLength) {
 		tokenizer_feed_char (t, programChunk[i]);
 	}
 }
-
-
-int main (int argc, char * argv[]) {
-	
-	Tokenizer t;
-	tokenizer_init (&t);
-
-	char program[] = "number a = 1; ";
-	int programLength = strlen(program);
-
-	tokenizer_feed (&t, program, programLength);
-
-	return 0;
-}
