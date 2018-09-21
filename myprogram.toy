@@ -1,4 +1,11 @@
-int a = 1;
-int b = 2;
+/**
+ * Uber toy program
+ */
 
-int c = a + b;
+//uber var a
+number a = 1;
+number b = 2; //uber var b
+
+number c = a + b; /* uber computation */
+
+string zorg = "blax";

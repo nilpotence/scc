@@ -166,32 +166,27 @@ int automata_comment_feed (Automata *a, char c) {
 				return false;
 			}
 		case 2: //multi line comment
+			automata_do_feed (a, c);
 			if (c == '*') {
-				automata_do_feed (a, c);
 				a->state = 4;
-				return true;
-			} else {
-				automata_do_feed (a, c);
-				return true;
 			}
+			return true;
 		case 3: //inline comment
+			automata_do_feed (a, c);
 			if (c == '\n') {
-				automata_do_feed (a, c);
 				a->state = -1;
 				a->isFinal = true;
-				return true;
 			}
+			return true;
 		case 4:
+			automata_do_feed (a, c);
 			if (c == '/') {
-				automata_do_feed (a, c);
 				a->state = -1;
 				a->isFinal = true;
-				return true;
 			} else {
-				automata_do_feed (a, c);
 				a->state = 2;
-				return true;
 			}
+			return true;
 		case -1:
 		default:
 			a->state = -1;
@@ -366,12 +361,10 @@ void tokenizer_create_token (Tokenizer *t, Automata *a) {
 		token->prev = NULL;
 	} else {
 		Token *tmp = t->tokens;
-		while (token->next != NULL) tmp = tmp->next;
+		while (tmp->next != NULL) tmp = tmp->next;
 		tmp->next = token;
 		token->prev = tmp;
 	}
-
-	printf ("(%s: %s)\n", descriptor.name, token->word);
 }
 
 void tokenizer_init (Tokenizer *t) {
